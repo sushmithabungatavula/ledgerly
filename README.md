@@ -1,5 +1,7 @@
 # Ledgerly
 
+**Live demo:** https://ledgerly-eight-sepia.vercel.app
+
 An expense tracker that sorts your transactions with a small machine learning model. When the model guesses wrong, you fix it once and it learns.
 
 ## The problem
