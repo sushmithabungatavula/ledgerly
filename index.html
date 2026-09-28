@@ -801,7 +801,7 @@ function getOCR(){
   }).catch(e=>{ocrP=null;throw e}));
 }
 function decodeImage(file,url){
-  return createImageBitmap(file).catch(()=>new Promise((res,rej)=>{
+  return createImageBitmap(file,{imageOrientation:"from-image"}).catch(()=>new Promise((res,rej)=>{
     const img=new Image();img.onload=()=>res(img);
     img.onerror=()=>rej(new Error(/hei[cf]/i.test(file.type+file.name)?"This browser can't open HEIC photos. On iPhone, set Settings > Camera > Formats to Most Compatible, or send a screenshot of the receipt instead.":"This file doesn't look like a photo this browser can open. Try a JPG or PNG."));
     img.src=url;
@@ -815,6 +815,13 @@ async function prepImage(file,url){
   const x=c.getContext("2d");x.filter="grayscale(1) contrast(1.4)";x.drawImage(bmp,0,0,c.width,c.height);
   return c;
 }
+function rotate(src,deg){
+  const c=document.createElement("canvas"),side=deg%180!==0;
+  c.width=side?src.height:src.width;c.height=side?src.width:src.height;
+  const x=c.getContext("2d");x.translate(c.width/2,c.height/2);x.rotate(deg*Math.PI/180);x.drawImage(src,-src.width/2,-src.height/2);
+  return c;
+}
+const scanScore=(r,conf)=>(r.amt?2:0)+(r.desc?1:0)+(r.date?1:0)+conf/100;
 const readyScans=()=>scanItems.filter(it=>it.status==="done"&&it.desc.trim()&&+it.amt>0);
 function updateScanOk(){const n=readyScans().length;scanOk.disabled=!n;scanOk.textContent=n>1?`Add ${n} expenses`:"Add expense"}
 function scanGuess(it){
@@ -853,8 +860,15 @@ function scanOne(it,file){
       ocrLog=m=>{if(m.status==="recognizing text"){it.progress=m.progress;const bar=scanList.querySelector(`[data-sid="${it.id}"] .meter div`);if(bar)bar.style.width=Math.round(m.progress*100)+"%"}};
       const img=await prepImage(file,it.url);
       it.stage="Reading receipt…";renderScanItem(it);
-      const {data}=await w.recognize(img);
-      const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});
+      const read=async c=>{const {data}=await w.recognize(c);const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});return {r,score:scanScore(r,data.confidence)}};
+      let best=await read(img);
+      // Sideways or upside-down receipt: nothing sensible came out, so try the other orientations
+      for(const deg of [90,270,180]){
+        if(best.r.amt&&best.r.desc&&best.score>=4.5)break;
+        it.stage=`Trying the photo turned ${deg}°…`;renderScanItem(it);
+        const alt=await read(rotate(img,deg));if(alt.score>best.score)best=alt;
+      }
+      const r=best.r;
       Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today()});
       const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
       if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
