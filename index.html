@@ -209,6 +209,28 @@ dialog::backdrop{background:rgba(15,20,27,.45);backdrop-filter:blur(2px)}
 .why svg{width:15px;height:15px;margin-top:1px}
 .guess.idle{color:var(--muted);font-size:13.5px;display:flex;gap:10px;align-items:center}
 
+/* Receipt scanning */
+.scan-cta{display:flex;align-items:center;gap:12px;width:100%;margin-top:8px;padding:12px 14px;border:1.5px dashed var(--line);border-radius:12px;background:none;text-align:left;color:var(--ink)}
+.scan-cta:hover{border-color:var(--accent);background:var(--accent-soft)}
+.scan-cta .av{background:var(--accent-soft);color:var(--accent)}
+.scan-cta small{display:block;color:var(--muted);font-size:12.5px}
+.or{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:12px;margin-top:14px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+#dlg-scan{width:min(560px,calc(100% - 24px))}
+.scan-list{display:grid;gap:10px;margin-top:10px;max-height:min(60vh,560px);overflow-y:auto}
+.scan-item{display:grid;grid-template-columns:64px minmax(0,1fr) 32px;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface-2)}
+.scan-item img{width:64px;height:84px;object-fit:cover;border-radius:8px;background:var(--line)}
+.scan-item .field{margin-top:0}
+.scan-item .field+.field,.scan-item .row2{margin-top:8px}
+.scan-item input,.scan-item select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13.5px}
+.scan-item .amt-in input{padding-left:22px}
+.scan-status{font-size:13px;color:var(--muted);padding-top:6px}
+.scan-status .meter{background:var(--line);max-width:220px}
+.scan-hint{font-size:12px;color:var(--muted);margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scan-hint .conf-pill{margin-left:0}
+.scan-note{font-size:12px;color:var(--warn-ink);background:var(--warn-soft);border-radius:8px;padding:4px 8px;margin-bottom:8px}
+@media (max-width:480px){.scan-item{grid-template-columns:48px minmax(0,1fr) 28px;gap:8px}.scan-item img{width:48px;height:64px}.scan-btn span{display:none}}
+
 /* Toast */
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--toast-bg);color:var(--toast-ink);padding:11px 16px;border-radius:12px;font-size:13.5px;display:flex;gap:10px;align-items:center;opacity:0;pointer-events:none;transition:all .25s ease;z-index:50;max-width:calc(100% - 32px)}
 .toast svg{color:var(--toast-icon)}
@@ -256,6 +278,7 @@ dialog::backdrop{background:rgba(15,20,27,.45);backdrop-filter:blur(2px)}
       <div class="actions">
         <span class="sync" id="sync">Loading…</span>
         <div class="pal" role="group" aria-label="Color palette"><button data-pal="ocean" aria-label="Ocean palette" title="Ocean"><i style="background:#001219"></i><i style="background:#EE9B00"></i></button><button data-pal="violet" aria-label="Violet palette" title="Violet"><i style="background:#422680"></i><i style="background:#F54952"></i></button><button data-pal="paprika" aria-label="Paprika palette" title="Paprika"><i style="background:#EB5E28"></i><i style="background:#403D39"></i></button><button data-pal="plum" aria-label="Plum palette" title="Plum"><i style="background:#58355E"></i><i style="background:#7AE7C7"></i></button></div>
+        <button class="btn scan-btn" data-act="scan" aria-label="Scan receipt"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Scan receipt</span></button>
         <button class="btn primary" data-act="add"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add expense</button>
       </div>
     </div>
@@ -269,6 +292,8 @@ dialog::backdrop{background:rgba(15,20,27,.45);backdrop-filter:blur(2px)}
 <dialog id="dlg-add" aria-labelledby="dlg-add-title">
   <div class="dlg-h"><h2 id="dlg-add-title">Add expense</h2><button class="icon-btn" data-close aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="dlg-b">
+    <button class="scan-cta" type="button" data-act="scan"><div class="av"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div><div><b>Scan a receipt</b><small>Take a photo or pick several. Ledgerly reads the store, total and date, then sorts each one.</small></div></button>
+    <div class="or">or type it in</div>
     <div class="field"><label for="f-desc">Merchant or description</label><input id="f-desc" autocomplete="off" placeholder="e.g. Trader Joe's"></div>
     <div class="row2">
       <div class="field"><label for="f-amt">Amount</label><div class="amt-in"><span>$</span><input id="f-amt" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
@@ -287,6 +312,16 @@ dialog::backdrop{background:rgba(15,20,27,.45);backdrop-filter:blur(2px)}
     <div class="dlg-f"><button class="btn" data-close>Cancel</button><button class="btn primary" id="imp-ok">Import</button></div>
   </div>
 </dialog>
+
+<dialog id="dlg-scan" aria-labelledby="dlg-scan-title">
+  <div class="dlg-h"><h2 id="dlg-scan-title">Scanned receipts</h2><button class="icon-btn" data-close aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="dlg-b">
+    <p class="note" style="margin-top:0">Photos are read on your device and never uploaded. Check each one, then add them all at once. Unsure categories go to your review queue.</p>
+    <div class="scan-list" id="scan-list"></div>
+    <div class="dlg-f"><button class="btn" data-act="scan" style="margin-right:auto"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>More photos</button><button class="btn" data-close>Cancel</button><button class="btn primary" id="scan-ok" disabled>Add</button></div>
+  </div>
+</dialog>
+<input type="file" id="scan-file" accept="image/*" multiple hidden>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -370,6 +405,48 @@ function predict(m,desc,amt){
   return {cat:CATS[win],conf:order[0][0],top:order.slice(0,4).map(([p,i])=>({cat:CATS[i],p})),ev,known};
 }
 
+/* ---------- Receipt parser (same code as src/receipt.js) ---------- */
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+const AMT_RE=/(?:^|[^\d.,])-?\$?\s?(\d{1,3}(?:[,.]\d{3})*[.,]\d{2}|\d+[.,]\d{2})(?![\d])/g;
+const SKIP_MERCHANT=/receipt|welcome|thank|customer|copy|invoice|order\s*#|store\s*#|tel\b|phone|fax|www\.|https?:|@|\.com\b|cashier|server|table|guest|register|trans(action)?\b|date|time/i;
+const ADDRESS=/^\d+\s|\b(st|ave|rd|blvd|suite|ste|street|road|drive|dr|hwy|way|lane|ln|pkwy)\b\.?|\b[A-Z]{2}\s*\d{5}\b/i;
+function toAmount(s){const m=s.match(/^(.*)[.,](\d{2})$/);if(!m)return NaN;return parseFloat(m[1].replace(/[.,\s]/g,"")+"."+m[2])}
+function amountsIn(line){const out=[];let m;AMT_RE.lastIndex=0;while((m=AMT_RE.exec(line))){const v=toAmount(m[1]);if(v>0&&v<100000)out.push(v)}return out}
+function ymd(y,mo,d){y=+y;mo=+mo;d=+d;if(y<100)y+=2000;if(y<2000||y>2099||mo<1||mo>12||d<1||d>31)return null;return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
+function findDate(text){
+  let m;
+  if((m=text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/))){const r=ymd(m[1],m[2],m[3]);if(r)return r}
+  if((m=text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/))){const r=+m[1]>12?ymd(m[3],m[2],m[1]):ymd(m[3],m[1],m[2]);if(r)return r}
+  if((m=text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i))){const r=ymd(m[3],MONTHS[m[1].toLowerCase()],m[2]);if(r)return r}
+  if((m=text.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/i))){const r=ymd(m[3],MONTHS[m[2].toLowerCase()],m[1]);if(r)return r}
+  return null;
+}
+function findTotal(lines){
+  const RANKS=[[/grand\s*total|amount\s*due|balance\s*due|total\s*due|amount\s*paid|total\s*paid/i,3],[/\btotal\b/i,2],[/\b(amount|charged|visa|mastercard|amex|debit|credit)\b/i,1]];
+  const NOT_TOTAL=/sub\s*-?\s*total|total\s*(tax|savings?|discount|items?|qty|quantity)|\btax\b|savings|you\s*saved|change|tip\s*guide|suggested/i;
+  let best=null;
+  lines.forEach((line,i)=>{
+    if(NOT_TOTAL.test(line))return;
+    const hit=RANKS.find(([re])=>re.test(line));if(!hit)return;
+    let vals=amountsIn(line);if(!vals.length&&i+1<lines.length)vals=amountsIn(lines[i+1]);if(!vals.length)return;
+    const v=vals[vals.length-1];
+    if(!best||hit[1]>best.rank||(hit[1]===best.rank&&v>best.v))best={v,rank:hit[1]};
+  });
+  if(best)return best.v;
+  const all=lines.filter(l=>!/change|cash|tender|savings/i.test(l)).flatMap(amountsIn);
+  return all.length?Math.max(...all):null;
+}
+function findMerchant(lines,isKnown){
+  const cands=lines.slice(0,8).filter(l=>(l.match(/[A-Za-z]/g)||[]).length>=3).filter(l=>!SKIP_MERCHANT.test(l)&&!ADDRESS.test(l)&&!amountsIn(l).length&&!findDate(l)).map(l=>l.replace(/'/g,"").replace(/[^A-Za-z0-9&.\- ]+/g," ").replace(/\s+/g," ").trim().slice(0,40)).filter(l=>l.length>=3);
+  if(!cands.length)return "";
+  if(isKnown){const k=cands.find(l=>l.toLowerCase().split(/[^a-z]+/).some(w=>w.length>2&&isKnown(w)));if(k)return k}
+  return cands[0];
+}
+function parseReceipt(text,opts){
+  const lines=String(text||"").split(/\r?\n/).map(l=>l.replace(/\s+/g," ").trim()).filter(Boolean);
+  return {desc:findMerchant(lines,opts&&opts.isKnown),amt:findTotal(lines),date:findDate(lines.join("\n"))};
+}
+
 
 
 /* ---------- Icons ---------- */
@@ -395,7 +472,8 @@ const P={
   wallet:'<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h15a3 3 0 0 1 3 3v0"/><circle cx="16.5" cy="14.5" r="1"/>',
   receipt:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
   target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8"/>',
-  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>'
+  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'
 };
 const icon=(k,extra)=>`<svg class="i"${extra||""} viewBox="0 0 24 24">${P[k]||""}</svg>`;
 const av=c=>{const i=ci(c);return `<div class="av" style="background:${col(i,.14)};color:${col(i)}">${icon(c)}</div>`};
@@ -504,6 +582,7 @@ document.addEventListener("click",e=>{
   const a=e.target.closest("[data-act]");if(!a)return;
   const act=a.dataset.act;
   if(act==="add")openAdd();
+  else if(act==="scan")scanFile.click();
   else if(act==="import"){document.getElementById("imp-text").value="";document.getElementById("dlg-import").showModal()}
   else if(act==="sample")loadSample();
   else if(act==="clear"){if(state.expenses.length&&confirm(`Delete all ${state.expenses.length} expenses? The model goes back to its starter knowledge.`)){state.expenses=[];retrain();render();save()}}
@@ -520,7 +599,7 @@ document.addEventListener("change",e=>{
 });
 
 /* ---------- Views ---------- */
-const emptyState=(title,body)=>`<div class="card empty"><div class="av">${icon("wallet")}</div><h3>${title}</h3><p>${body}</p><div class="btns"><button class="btn primary" data-act="add">${icon("spark")}Add an expense</button><button class="btn" data-act="sample">Load sample month</button><button class="btn" data-act="import">${icon("upload")}Paste transactions</button></div></div>`;
+const emptyState=(title,body)=>`<div class="card empty"><div class="av">${icon("wallet")}</div><h3>${title}</h3><p>${body}</p><div class="btns"><button class="btn primary" data-act="add">${icon("spark")}Add an expense</button><button class="btn" data-act="scan">${icon("camera")}Scan receipts</button><button class="btn" data-act="sample">Load sample month</button><button class="btn" data-act="import">${icon("upload")}Paste transactions</button></div></div>`;
 function monthTotals(m){return state.expenses.filter(e=>ym(e.date)===m).reduce((s,e)=>s+e.amt,0)}
 function donut(xs,size){
   const totals=CATS.map(c=>[c,xs.filter(e=>e.cat===c).reduce((s,e)=>s+e.amt,0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
@@ -719,6 +798,96 @@ document.getElementById("imp-ok").addEventListener("click",()=>{
   });
   document.getElementById("dlg-import").close();
   if(n){render();save();const r=needsReview().length;toast(icon("check")+`<span>Imported ${n}. ${r?r+" need a quick review on Overview.":"All looked confident."}</span>`)}
+});
+
+/* ---------- Receipt scanning: OCR in the browser, then the model sorts each one ---------- */
+const scanFile=document.getElementById("scan-file"),dScan=document.getElementById("dlg-scan"),scanList=document.getElementById("scan-list"),scanOk=document.getElementById("scan-ok");
+let scanItems=[],ocrP=null,ocrLog=null,ocrQueue=Promise.resolve();
+function getOCR(){
+  // Tesseract.js loads only the first time someone scans, so the app stays light otherwise
+  return ocrP||(ocrP=new Promise((res,rej)=>{
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    s.onload=()=>res(window.Tesseract.createWorker("eng",1,{logger:m=>ocrLog&&ocrLog(m)}));
+    s.onerror=()=>rej(new Error("Could not load the text reader"));
+    document.head.appendChild(s);
+  }).catch(e=>{ocrP=null;throw e}));
+}
+async function prepImage(file){
+  // Shrink big phone photos and boost contrast: faster and more accurate OCR
+  const bmp=await createImageBitmap(file);
+  const k=Math.min(1,1800/Math.max(bmp.width,bmp.height)),c=document.createElement("canvas");
+  c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+  const x=c.getContext("2d");x.filter="grayscale(1) contrast(1.4)";x.drawImage(bmp,0,0,c.width,c.height);
+  return c;
+}
+const readyScans=()=>scanItems.filter(it=>it.status==="done"&&it.desc.trim()&&+it.amt>0);
+function updateScanOk(){const n=readyScans().length;scanOk.disabled=!n;scanOk.textContent=n>1?`Add ${n} expenses`:"Add expense"}
+function scanGuess(it){
+  const el=scanList.querySelector(`[data-sid="${it.id}"]`);if(!el||it.status!=="done")return;
+  const hint=el.querySelector(".scan-hint"),sel=el.querySelector("select");
+  if(!it.desc.trim()){hint.innerHTML="Add the store name and the model will pick a category.";return}
+  const g=predict(model,it.desc,it.amt);it.guess=g.cat;
+  sel.value=it.pick||g.cat;sel.style.color=col(ci(sel.value));
+  hint.innerHTML=it.pick&&it.pick!==g.cat?`${icon("check")}Your pick. The model said ${g.cat} and will learn from this.`:`${icon("spark")}Model's guess${g.conf<REVIEW_BELOW?`<span class="conf-pill">${pct(g.conf)} sure</span>`:`, ${pct(g.conf)} sure`}${g.known?"":". New store, so check it."}`;
+}
+function renderScanItem(it){
+  if(!scanItems.includes(it))return;
+  let el=scanList.querySelector(`[data-sid="${it.id}"]`);
+  if(!el){el=document.createElement("div");el.className="scan-item";el.dataset.sid=it.id;scanList.appendChild(el)}
+  const rm=`<button class="icon-btn" data-scan-rm="${it.id}" aria-label="Remove this receipt">${icon("trash")}</button>`;
+  if(it.status==="reading"){
+    el.innerHTML=`<img src="${it.url}" alt="Receipt photo"><div class="scan-status" role="status">${esc(it.stage)}<div class="meter"><div style="width:${Math.round(it.progress*100)}%"></div></div></div>${rm}`;
+  }else{
+    el.innerHTML=`<img src="${it.url}" alt="Receipt photo"><div>${it.note?`<div class="scan-note">${esc(it.note)}</div>`:""}
+      <div class="field"><input data-k="desc" value="${esc(it.desc)}" placeholder="Store name" aria-label="Store name"></div>
+      <div class="row2"><div class="field amt-in"><span>$</span><input data-k="amt" type="number" min="0" step="0.01" inputmode="decimal" value="${it.amt||""}" placeholder="Total" aria-label="Total"></div><div class="field"><input data-k="date" type="date" value="${it.date}" aria-label="Date"></div></div>
+      <div class="field"><select aria-label="Category">${CATS.map(c=>`<option>${c}</option>`).join("")}</select></div>
+      <div class="scan-hint"></div></div>${rm}`;
+    el.querySelectorAll("[data-k]").forEach(inp=>inp.addEventListener("input",()=>{it[inp.dataset.k]=inp.value;if(inp.dataset.k!=="date")scanGuess(it);updateScanOk()}));
+    el.querySelector("select").addEventListener("change",ev=>{it.pick=ev.target.value===it.guess?null:ev.target.value;scanGuess(it)});
+    scanGuess(it);
+  }
+  updateScanOk();
+}
+function scanOne(it,file){
+  ocrQueue=ocrQueue.then(async()=>{
+    if(!scanItems.includes(it))return;
+    try{
+      it.stage="Loading the text reader…";renderScanItem(it);
+      const w=await getOCR();
+      it.stage="Reading receipt…";
+      ocrLog=m=>{if(m.status==="recognizing text"){it.progress=m.progress;const bar=scanList.querySelector(`[data-sid="${it.id}"] .meter div`);if(bar)bar.style.width=Math.round(m.progress*100)+"%"}};
+      renderScanItem(it);
+      const {data}=await w.recognize(await prepImage(file));
+      const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});
+      Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today()});
+      const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
+      if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
+    }catch(e){it.note="Couldn't read this photo. Type the details below, or try a sharper, flatter photo."}
+    ocrLog=null;it.status="done";renderScanItem(it);
+  });
+}
+scanFile.addEventListener("change",()=>{
+  const files=[...scanFile.files].filter(f=>f.type.startsWith("image/"));scanFile.value="";
+  if(!files.length)return;
+  if(dAdd.open)dAdd.close();
+  if(!dScan.open){scanItems.forEach(it=>URL.revokeObjectURL(it.url));scanItems=[];scanList.innerHTML="";dScan.showModal()}
+  files.forEach(f=>{const it={id:uid(),url:URL.createObjectURL(f),status:"reading",stage:"Waiting…",progress:0,desc:"",amt:"",date:today(),pick:null,guess:null,note:""};scanItems.push(it);renderScanItem(it);scanOne(it,f)});
+});
+scanList.addEventListener("click",e=>{
+  const b=e.target.closest("[data-scan-rm]");if(!b)return;
+  const it=scanItems.find(x=>x.id===b.dataset.scanRm);
+  scanItems=scanItems.filter(x=>x!==it);b.closest(".scan-item").remove();if(it)URL.revokeObjectURL(it.url);updateScanOk();
+});
+scanOk.addEventListener("click",()=>{
+  const xs=readyScans();if(!xs.length)return;
+  let last=null;xs.forEach(it=>{last=addExpense(it.desc.trim(),+it.amt,it.date||today(),it.pick,false)});
+  scanItems=scanItems.filter(it=>!xs.includes(it));xs.forEach(it=>URL.revokeObjectURL(it.url));
+  if(!scanItems.length)dScan.close();else scanList.querySelectorAll(".scan-item").forEach(el=>{if(!scanItems.some(it=>it.id===el.dataset.sid))el.remove()});
+  flashId=last&&last.id;render();save();
+  const r=needsReview().length;
+  toast(icon("check")+`<span>Added ${xs.length===1?esc(xs[0].desc.trim())+" to "+last.cat:xs.length+" receipts"}.${r?" "+r+" need a quick review on Overview.":""}</span>`);
 });
 
 const PALKEY="ledgerly-palette-v3";

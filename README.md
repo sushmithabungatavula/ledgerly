@@ -17,6 +17,7 @@ Ledgerly uses a classifier that learns your categories from your corrections and
 - Live category guess as you type, with the top 4 categories and the words behind the guess
 - Review queue for guesses under 60% confidence
 - Instant retraining when you change any category
+- Receipt scanning: take a photo or pick several, and Ledgerly reads the store, total and date, then sorts each one. Text recognition runs in your browser, so photos are never uploaded.
 - Paste import for bank lines (`description, amount, date`)
 - Dashboard with monthly totals, month-over-month change, and a spending donut
 - Spending page with per-category bars and a daily chart
@@ -64,6 +65,7 @@ Cross-validation scores lower, around 50%, because most starter merchants appear
 - Plain JavaScript, HTML, and CSS. No framework, no build step.
 - Custom Naive Bayes classifier
 - Hand-built SVG charts and icons
+- [Tesseract.js](https://github.com/naptha/tesseract.js) for reading receipt photos, loaded only the first time you scan
 - CSS custom properties for theming
 - Onest font from Google Fonts
 - Storage: a private per-user document when hosted as a Claude artifact, with browser localStorage as backup. Run locally, it uses localStorage only.
@@ -73,11 +75,13 @@ Cross-validation scores lower, around 50%, because most starter merchants appear
 ```
 index.html                 The full app in one file
 src/classifier.js          The model on its own, for reading and testing
-tests/classifier.test.js   Unit tests (Node's built-in test runner)
+src/receipt.js             Receipt text parser (store, total, date)
+tests/classifier.test.js   Model tests (Node's built-in test runner)
+tests/receipt.test.js      Receipt parser tests
 package.json
 ```
 
-`index.html` inlines the same classifier code as `src/classifier.js`, so the app runs as a single file. If you change the model, update both.
+`index.html` inlines the same code as `src/classifier.js` and `src/receipt.js`, so the app runs as a single file. If you change either, update both copies.
 
 ## Run it
 
@@ -97,12 +101,13 @@ Needs Node 18 or later.
 npm test
 ```
 
-The 7 tests cover the tokenizer, amount ranges, probability output, known merchants, learning a new merchant from one correction, unknown-merchant detection, and accuracy improvement across the sample month.
+The 15 tests cover the model (tokenizer, amount ranges, probability output, known merchants, learning from one correction, unknown-merchant detection, accuracy improvement across the sample month) and the receipt parser (picking the total over subtotal, tax and cash, several date formats, and skipping addresses and logo noise when finding the store name).
 
 ## Limits
 
 - Cold start: the model knows 69 merchants at first
-- No bank connection: you add or paste transactions
+- No bank connection: you scan, add or paste transactions
+- Receipt reading depends on photo quality. Crumpled or faded receipts may need a manual fix before you add them.
 - Full retrain on every change: fine for personal data, not for bank scale
 
 ## Next steps

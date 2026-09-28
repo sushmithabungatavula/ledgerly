@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Expense tracker with a from-scratch Naive Bayes classifier that learns from your corrections.",
   "scripts": {
-    "test": "node --test tests/classifier.test.js",
+    "test": "node --test tests/classifier.test.js tests/receipt.test.js",
     "start": "npx serve ."
   },
   "license": "MIT"
