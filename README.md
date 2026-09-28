@@ -22,7 +22,7 @@ Ledgerly uses a classifier that learns your categories from your corrections and
 - Dashboard with monthly totals, month-over-month change, and a spending donut
 - Spending page with per-category bars and a daily chart
 - Model page with live accuracy, an accuracy-over-time chart, per-category precision, recall, and F1, a confusion matrix, 5-fold cross-validation, and learned words per category
-- 4 color palettes, each with light and dark mode
+- Light and dark mode that follow your device setting
 - Responsive layout with a bottom tab bar on phones
 
 ## The model
