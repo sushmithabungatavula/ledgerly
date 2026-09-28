@@ -308,7 +308,6 @@ dialog::backdrop{background:rgba(15,20,27,.45);backdrop-filter:blur(2px)}
     <div class="dlg-f"><button class="btn" data-act="scan" style="margin-right:auto"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>More photos</button><button class="btn" data-close>Cancel</button><button class="btn primary" id="scan-ok" disabled>Add</button></div>
   </div>
 </dialog>
-<input type="file" id="scan-file" accept="image/*" multiple hidden>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -569,7 +568,7 @@ document.addEventListener("click",e=>{
   const a=e.target.closest("[data-act]");if(!a)return;
   const act=a.dataset.act;
   if(act==="add")openAdd();
-  else if(act==="scan")scanFile.click();
+  else if(act==="scan")pickPhotos();
   else if(act==="import"){document.getElementById("imp-text").value="";document.getElementById("dlg-import").showModal()}
   else if(act==="sample")loadSample();
   else if(act==="clear"){if(state.expenses.length&&confirm(`Delete all ${state.expenses.length} expenses? The model goes back to its starter knowledge.`)){state.expenses=[];retrain();render();save()}}
@@ -788,21 +787,29 @@ document.getElementById("imp-ok").addEventListener("click",()=>{
 });
 
 /* ---------- Receipt scanning: OCR in the browser, then the model sorts each one ---------- */
-const scanFile=document.getElementById("scan-file"),dScan=document.getElementById("dlg-scan"),scanList=document.getElementById("scan-list"),scanOk=document.getElementById("scan-ok");
+const dScan=document.getElementById("dlg-scan"),scanList=document.getElementById("scan-list"),scanOk=document.getElementById("scan-ok");
 let scanItems=[],ocrP=null,ocrLog=null,ocrQueue=Promise.resolve();
 function getOCR(){
   // Tesseract.js loads only the first time someone scans, so the app stays light otherwise
   return ocrP||(ocrP=new Promise((res,rej)=>{
     const s=document.createElement("script");
     s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
-    s.onload=()=>res(window.Tesseract.createWorker("eng",1,{logger:m=>ocrLog&&ocrLog(m)}));
-    s.onerror=()=>rej(new Error("Could not load the text reader"));
+    const t=setTimeout(()=>rej(new Error("The text reader took too long to download. Check your connection and try again.")),60000);
+    s.onload=()=>window.Tesseract.createWorker("eng",1,{logger:m=>ocrLog&&ocrLog(m)}).then(w=>{clearTimeout(t);res(w)},e=>{clearTimeout(t);rej(e)});
+    s.onerror=()=>{clearTimeout(t);rej(new Error("Couldn't download the text reader. Check your connection and try again."))};
     document.head.appendChild(s);
   }).catch(e=>{ocrP=null;throw e}));
 }
-async function prepImage(file){
+function decodeImage(file,url){
+  return createImageBitmap(file).catch(()=>new Promise((res,rej)=>{
+    const img=new Image();img.onload=()=>res(img);
+    img.onerror=()=>rej(new Error(/hei[cf]/i.test(file.type+file.name)?"This browser can't open HEIC photos. On iPhone, set Settings > Camera > Formats to Most Compatible, or send a screenshot of the receipt instead.":"This file doesn't look like a photo this browser can open. Try a JPG or PNG."));
+    img.src=url;
+  }));
+}
+async function prepImage(file,url){
   // Shrink big phone photos and boost contrast: faster and more accurate OCR
-  const bmp=await createImageBitmap(file);
+  const bmp=await decodeImage(file,url);
   const k=Math.min(1,1800/Math.max(bmp.width,bmp.height)),c=document.createElement("canvas");
   c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
   const x=c.getContext("2d");x.filter="grayscale(1) contrast(1.4)";x.drawImage(bmp,0,0,c.width,c.height);
@@ -841,27 +848,35 @@ function scanOne(it,file){
   ocrQueue=ocrQueue.then(async()=>{
     if(!scanItems.includes(it))return;
     try{
-      it.stage="Loading the text reader…";renderScanItem(it);
+      it.stage=ocrP?"Getting ready…":"Loading the text reader (first scan only)…";renderScanItem(it);
       const w=await getOCR();
-      it.stage="Reading receipt…";
       ocrLog=m=>{if(m.status==="recognizing text"){it.progress=m.progress;const bar=scanList.querySelector(`[data-sid="${it.id}"] .meter div`);if(bar)bar.style.width=Math.round(m.progress*100)+"%"}};
-      renderScanItem(it);
-      const {data}=await w.recognize(await prepImage(file));
+      const img=await prepImage(file,it.url);
+      it.stage="Reading receipt…";renderScanItem(it);
+      const {data}=await w.recognize(img);
       const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});
       Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today()});
       const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
       if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
-    }catch(e){it.note="Couldn't read this photo. Type the details below, or try a sharper, flatter photo."}
+    }catch(e){console.error("Receipt scan failed:",e);it.note=(e&&e.message&&/HEIC|JPG|connection/.test(e.message)?e.message:"Couldn't read this photo"+(e&&e.message?" ("+e.message+")":"")+".")+" You can type the details below."}
     ocrLog=null;it.status="done";renderScanItem(it);
   });
 }
-scanFile.addEventListener("change",()=>{
-  const files=[...scanFile.files].filter(f=>f.type.startsWith("image/"));scanFile.value="";
-  if(!files.length)return;
+function pickPhotos(){
+  // A fresh input inside the open dialog: modal dialogs make everything outside them inert
+  const inp=document.createElement("input");inp.type="file";inp.accept="image/*,.heic,.heif";inp.multiple=true;inp.hidden=true;
+  (document.querySelector("dialog[open]")||document.body).appendChild(inp);
+  inp.addEventListener("change",()=>{const files=[...inp.files];inp.remove();handlePhotos(files)});
+  inp.click();
+}
+function handlePhotos(files){
+  // Some phones report an empty type, so don't filter on it; decoding decides
+  files=files.filter(f=>!f.type||f.type.startsWith("image/")||/\.(hei[cf]|jpe?g|png|webp)$/i.test(f.name));
+  if(!files.length){toast(icon("camera")+"<span>That file isn't a photo. Pick a JPG, PNG or HEIC image.</span>");return}
   if(dAdd.open)dAdd.close();
   if(!dScan.open){scanItems.forEach(it=>URL.revokeObjectURL(it.url));scanItems=[];scanList.innerHTML="";dScan.showModal()}
   files.forEach(f=>{const it={id:uid(),url:URL.createObjectURL(f),status:"reading",stage:"Waiting…",progress:0,desc:"",amt:"",date:today(),pick:null,guess:null,note:""};scanItems.push(it);renderScanItem(it);scanOne(it,f)});
-});
+}
 scanList.addEventListener("click",e=>{
   const b=e.target.closest("[data-scan-rm]");if(!b)return;
   const it=scanItems.find(x=>x.id===b.dataset.scanRm);
