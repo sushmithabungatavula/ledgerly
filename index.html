@@ -788,14 +788,20 @@ document.getElementById("imp-ok").addEventListener("click",()=>{
 
 /* ---------- Receipt scanning: OCR in the browser, then the model sorts each one ---------- */
 const dScan=document.getElementById("dlg-scan"),scanList=document.getElementById("scan-list"),scanOk=document.getElementById("scan-ok");
-let scanItems=[],ocrP=null,ocrLog=null,ocrQueue=Promise.resolve();
+let scanItems=[],ocrP=null,ocrLog=null,ocrStep="",ocrQueue=Promise.resolve();
+const OCR_STEPS={"loading tesseract core":"Downloading the text reader","initializing tesseract":"Starting the text reader","loading language traineddata":"Downloading English text data","initializing api":"Almost ready"};
 function getOCR(){
-  // Tesseract.js loads only the first time someone scans, so the app stays light otherwise
+  // Tesseract.js loads only the first time someone scans, so the app stays light otherwise.
+  // Every file is served from this site (ocr/), and its IndexedDB cache is off: on iPhone
+  // Safari an IndexedDB open can hang forever, which left scans stuck on "Loading".
   return ocrP||(ocrP=new Promise((res,rej)=>{
-    const s=document.createElement("script");
-    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
-    const t=setTimeout(()=>rej(new Error("The text reader took too long to download. Check your connection and try again.")),60000);
-    s.onload=()=>window.Tesseract.createWorker("eng",1,{logger:m=>ocrLog&&ocrLog(m)}).then(w=>{clearTimeout(t);res(w)},e=>{clearTimeout(t);rej(e)});
+    const u=f=>new URL("ocr/"+f,location.href).href;
+    let t=null;const arm=()=>{clearTimeout(t);t=setTimeout(()=>rej(new Error(`The text reader got stuck (${ocrStep||"starting"}). Check your connection, reload the page and try again.`)),45000)};
+    arm();
+    const s=document.createElement("script");s.src=u("tesseract.min.js");
+    s.onload=()=>window.Tesseract.createWorker("eng",1,{workerPath:u("worker.min.js"),corePath:u(""),langPath:u("").replace(/\/$/,""),workerBlobURL:false,cacheMethod:"none",
+      logger:m=>{if(OCR_STEPS[m.status]&&ocrStep!==OCR_STEPS[m.status]){ocrStep=OCR_STEPS[m.status];arm()}ocrLog&&ocrLog(m)}})
+      .then(w=>{clearTimeout(t);res(w)},e=>{clearTimeout(t);rej(e instanceof Error?e:new Error(String(e)))});
     s.onerror=()=>{clearTimeout(t);rej(new Error("Couldn't download the text reader. Check your connection and try again."))};
     document.head.appendChild(s);
   }).catch(e=>{ocrP=null;throw e}));
@@ -856,8 +862,8 @@ function scanOne(it,file){
     if(!scanItems.includes(it))return;
     try{
       it.stage=ocrP?"Getting ready…":"Loading the text reader (first scan only)…";renderScanItem(it);
+      ocrLog=m=>{if(OCR_STEPS[m.status]&&it.status==="reading"){it.stage=OCR_STEPS[m.status]+" (first scan only)…";const st=scanList.querySelector(`[data-sid="${it.id}"] .scan-status`);if(st&&st.firstChild)st.firstChild.textContent=it.stage}if(m.status==="recognizing text"){it.progress=m.progress;const bar=scanList.querySelector(`[data-sid="${it.id}"] .meter div`);if(bar)bar.style.width=Math.round(m.progress*100)+"%"}};
       const w=await getOCR();
-      ocrLog=m=>{if(m.status==="recognizing text"){it.progress=m.progress;const bar=scanList.querySelector(`[data-sid="${it.id}"] .meter div`);if(bar)bar.style.width=Math.round(m.progress*100)+"%"}};
       const img=await prepImage(file,it.url);
       it.stage="Reading receipt…";renderScanItem(it);
       const read=async c=>{const {data}=await w.recognize(c);const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});return {r,score:scanScore(r,data.confidence)}};
@@ -872,7 +878,7 @@ function scanOne(it,file){
       Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today()});
       const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
       if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
-    }catch(e){console.error("Receipt scan failed:",e);it.note=(e&&e.message&&/HEIC|JPG|connection/.test(e.message)?e.message:"Couldn't read this photo"+(e&&e.message?" ("+e.message+")":"")+".")+" You can type the details below."}
+    }catch(e){console.error("Receipt scan failed:",e);it.note=(e&&e.message&&/HEIC|JPG|connection|stuck/.test(e.message)?e.message:"Couldn't read this photo"+(e&&e.message?" ("+e.message+")":"")+".")+" You can type the details below."}
     ocrLog=null;it.status="done";renderScanItem(it);
   });
 }

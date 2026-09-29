@@ -65,7 +65,7 @@ Cross-validation scores lower, around 50%, because most starter merchants appear
 - Plain JavaScript, HTML, and CSS. No framework, no build step.
 - Custom Naive Bayes classifier
 - Hand-built SVG charts and icons
-- [Tesseract.js](https://github.com/naptha/tesseract.js) for reading receipt photos, loaded only the first time you scan
+- [Tesseract.js](https://github.com/naptha/tesseract.js) 5.1.1 for reading receipt photos, loaded only the first time you scan. Its files live in `ocr/` and are served from this site, not a CDN.
 - CSS custom properties for theming
 - Onest font from Google Fonts
 - Storage: a private per-user document when hosted as a Claude artifact, with browser localStorage as backup. Run locally, it uses localStorage only.
@@ -78,6 +78,7 @@ src/classifier.js          The model on its own, for reading and testing
 src/receipt.js             Receipt text parser (store, total, date)
 tests/classifier.test.js   Model tests (Node's built-in test runner)
 tests/receipt.test.js      Receipt parser tests
+ocr/                       Tesseract.js worker, WebAssembly core and English data (Apache 2.0)
 package.json
 ```
 
