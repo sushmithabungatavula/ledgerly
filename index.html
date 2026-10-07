@@ -392,47 +392,138 @@ function predict(m,desc,amt){
 }
 
 /* ---------- Receipt parser (same code as src/receipt.js) ---------- */
-const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-const AMT_RE=/(?:^|[^\d.,])-?\$?\s?(\d{1,3}(?:[,.]\d{3})*[.,]\d{2}|\d+[.,]\d{2})(?![\d])/g;
-const SKIP_MERCHANT=/receipt|welcome|thank|customer|copy|invoice|order\s*#|store\s*#|tel\b|phone|fax|www\.|https?:|@|\.com\b|cashier|server|table|guest|register|trans(action)?\b|date|time/i;
-const ADDRESS=/^\d+\s|\b(st|ave|rd|blvd|suite|ste|street|road|drive|dr|hwy|way|lane|ln|pkwy)\b\.?|\b[A-Z]{2}\s*\d{5}\b/i;
-function toAmount(s){const m=s.match(/^(.*)[.,](\d{2})$/);if(!m)return NaN;return parseFloat(m[1].replace(/[.,\s]/g,"")+"."+m[2])}
-function amountsIn(line){const out=[];let m;AMT_RE.lastIndex=0;while((m=AMT_RE.exec(line))){const v=toAmount(m[1]);if(v>0&&v<100000)out.push(v)}return out}
-function ymd(y,mo,d){y=+y;mo=+mo;d=+d;if(y<100)y+=2000;if(y<2000||y>2099||mo<1||mo>12||d<1||d>31)return null;return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
-function findDate(text){
-  let m;
-  if((m=text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/))){const r=ymd(m[1],m[2],m[3]);if(r)return r}
-  if((m=text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/))){const r=+m[1]>12?ymd(m[3],m[2],m[1]):ymd(m[3],m[1],m[2]);if(r)return r}
-  if((m=text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i))){const r=ymd(m[3],MONTHS[m[1].toLowerCase()],m[2]);if(r)return r}
-  if((m=text.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/i))){const r=ymd(m[3],MONTHS[m[2].toLowerCase()],m[1]);if(r)return r}
-  return null;
-}
-function findTotal(lines){
-  const RANKS=[[/grand\s*total|amount\s*due|balance\s*due|total\s*due|amount\s*paid|total\s*paid/i,3],[/\btotal\b/i,2],[/\b(amount|charged|visa|mastercard|amex|debit|credit)\b/i,1]];
-  const NOT_TOTAL=/sub\s*-?\s*total|total\s*(tax|savings?|discount|items?|qty|quantity)|\btax\b|savings|you\s*saved|change|tip\s*guide|suggested/i;
-  let best=null;
-  lines.forEach((line,i)=>{
-    if(NOT_TOTAL.test(line))return;
-    const hit=RANKS.find(([re])=>re.test(line));if(!hit)return;
-    let vals=amountsIn(line);if(!vals.length&&i+1<lines.length)vals=amountsIn(lines[i+1]);if(!vals.length)return;
-    const v=vals[vals.length-1];
-    if(!best||hit[1]>best.rank||(hit[1]===best.rank&&v>best.v))best={v,rank:hit[1]};
-  });
-  if(best)return best.v;
-  const all=lines.filter(l=>!/change|cash|tender|savings/i.test(l)).flatMap(amountsIn);
-  return all.length?Math.max(...all):null;
-}
-function findMerchant(lines,isKnown){
-  const cands=lines.slice(0,8).filter(l=>(l.match(/[A-Za-z]/g)||[]).length>=3).filter(l=>!SKIP_MERCHANT.test(l)&&!ADDRESS.test(l)&&!amountsIn(l).length&&!findDate(l)).map(l=>l.replace(/'/g,"").replace(/[^A-Za-z0-9&.\- ]+/g," ").replace(/\s+/g," ").trim().slice(0,40)).filter(l=>l.length>=3);
-  if(!cands.length)return "";
-  if(isKnown){const k=cands.find(l=>l.toLowerCase().split(/[^a-z]+/).some(w=>w.length>2&&isKnown(w)));if(k)return k}
-  return cands[0];
-}
-function parseReceipt(text,opts){
-  const lines=String(text||"").split(/\r?\n/).map(l=>l.replace(/\s+/g," ").trim()).filter(Boolean);
-  return {desc:findMerchant(lines,opts&&opts.isKnown),amt:findTotal(lines),date:findDate(lines.join("\n"))};
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const AMT_RE = /(?:^|[^\d.,])-?\$?\s?(\d{1,3}(?:[,.]\d{3})*[.,]\d{2}|\d+[.,]\d{2})(?![\d])/g;
+const SKIP_MERCHANT = /receipt|welcome|thank|customer|copy|invoice|order\s*#|store\s*#|tel\b|phone|fax|www\.|https?:|@|\.com\b|cashier|server|table|guest|register|trans(action)?\b|date|time/i;
+const ADDRESS = /^\d+\s|\b(st|ave|rd|blvd|suite|ste|street|road|drive|dr|hwy|way|lane|ln|pkwy)\b\.?|\b[A-Z]{2}\s*\d{5}\b/i;
+
+function toAmount(s) {
+  // Last separator followed by two digits is the decimal point, the rest are thousands marks
+  const m = s.match(/^(.*)[.,](\d{2})$/);
+  if (!m) return NaN;
+  return parseFloat(m[1].replace(/[.,\s]/g, "") + "." + m[2]);
 }
 
+function amountsIn(line) {
+  const out = [];
+  let m;
+  AMT_RE.lastIndex = 0;
+  while ((m = AMT_RE.exec(line))) {
+    const v = toAmount(m[1]);
+    if (v > 0 && v < 100000) out.push(v);
+  }
+  return out;
+}
+
+function pad(n) { return String(n).padStart(2, "0"); }
+function ymd(y, mo, d) {
+  y = +y; mo = +mo; d = +d;
+  if (y < 100) y += 2000;
+  if (y < 2000 || y > 2099 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+
+// OCR often reads 0 as O and 1 as l, I or |, but only fix them next to other digits
+function fixDigits(text) {
+  return text
+    .replace(/(?<=\d)[Oo]|[Oo](?=\d)/g, "0")
+    .replace(/(?<=\d)[lI|]|[lI|](?=\d)/g, "1")
+    .replace(/(\d)\s*([-/.])\s*(?=\d)/g, "$1$2");
+}
+
+function findDate(text) {
+  text = fixDigits(text);
+  let m;
+  if ((m = text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/))) {
+    const r = ymd(m[1], m[2], m[3]); if (r) return r;
+  }
+  if ((m = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/))) {
+    // US order first; if the first number can't be a month, read it as day/month
+    const r = +m[1] > 12 ? ymd(m[3], m[2], m[1]) : ymd(m[3], m[1], m[2]); if (r) return r;
+  }
+  if ((m = text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i))) {
+    const r = ymd(m[3], MONTHS[m[1].toLowerCase()], m[2]); if (r) return r;
+  }
+  if ((m = text.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/i))) {
+    const r = ymd(m[3], MONTHS[m[2].toLowerCase()], m[1]); if (r) return r;
+  }
+  return null;
+}
+
+function findTotal(lines) {
+  const RANKS = [
+    [/grand\s*total|amount\s*due|balance\s*due|total\s*due|amount\s*paid|total\s*paid/i, 3],
+    [/\btotal\b/i, 2],
+    [/\b(amount|charged|visa|mastercard|amex|debit|credit)\b/i, 1],
+  ];
+  const NOT_TOTAL = /sub\s*-?\s*total|total\s*(tax|savings?|discount|items?|qty|quantity)|\btax\b|savings|you\s*saved|change|tip\s*guide|suggested/i;
+  let best = null;
+  lines.forEach((line, i) => {
+    if (NOT_TOTAL.test(line)) return;
+    const hit = RANKS.find(([re]) => re.test(line));
+    if (!hit) return;
+    let vals = amountsIn(line);
+    if (!vals.length && i + 1 < lines.length) vals = amountsIn(lines[i + 1]);
+    if (!vals.length) return;
+    const v = vals[vals.length - 1];
+    if (!best || hit[1] > best.rank || (hit[1] === best.rank && v > best.v)) best = { v, rank: hit[1] };
+  });
+  if (best) return best.v;
+  // No total line: take the largest amount that isn't cash handed over or change given back
+  const all = lines.filter(l => !/change|cash|tender|savings/i.test(l)).flatMap(amountsIn);
+  return all.length ? Math.max(...all) : null;
+}
+
+function cleanMerchant(line) {
+  // Drop apostrophes so "JOE'S" reads as "JOES", the way bank statements and the model spell it
+  return line.replace(/'/g, "").replace(/[^A-Za-z0-9&.\- ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
+const STORE_WORD = /\b(super\s*market|market|grocery|grocer|foods?|mart|cafe|coffee|restaurant|bistro|kitchen|grill|bakery|pizza|pharmacy|drug|store|shop|station|fuel)\b/i;
+
+function findMerchant(lines, isKnown, lowConf) {
+  let cands = lines.slice(0, 8)
+    .filter(l => (l.match(/[A-Za-z]/g) || []).length >= 3)
+    .filter(l => !SKIP_MERCHANT.test(l) && !ADDRESS.test(l) && !amountsIn(l).length && !findDate(l))
+    .map(cleanMerchant)
+    .filter(l => l.length >= 3);
+  // Lines the OCR wasn't sure about are usually script logos misread as nonsense
+  if (lowConf) { const sure = cands.filter(l => !lowConf(l)); if (sure.length) cands = sure; }
+  if (!cands.length) return "";
+  // Prefer a line the model already recognizes, since logos often OCR as noise above the name
+  if (isKnown) {
+    const k = cands.find(l => l.toLowerCase().split(/[^a-z]+/).some(w => w.length > 2 && isKnown(w)));
+    if (k) return k;
+  }
+  // A line naming the kind of store ("GREEN SUPERMARKET") beats whatever sits above it
+  return cands.find(l => STORE_WORD.test(l)) || cands[0];
+}
+
+// Words on the receipt that give away the kind of store, for when the model doesn't know the name
+const HINTS = [
+  ["Groceries", /\b(super\s*market|grocery|groceries|grocer|produce|milk|bread|eggs?|banana|bananas|cheese|yogurt|butter|vegetables?|fruit|apples?|onions?|tomato(es)?|chicken|rice|cereal|deli|organic|lb|kg)\b/gi],
+  ["Dining", /\b(restaurant|cafe|caf\u00e9|coffee|latte|espresso|cappuccino|server|table|tip|gratuity|dine|dine-in|takeout|take-out|burger|fries|pizza|sandwich|entree|appetizer|bistro|grill)\b/gi],
+  ["Transport", /\b(fuel|gas|gallons?|gal|unleaded|diesel|pump|parking|toll|petrol)\b/gi],
+  ["Health", /\b(pharmacy|rx|prescription|clinic|medical|copay|dental|vitamins?)\b/gi],
+];
+function receiptHint(text) {
+  let best = null;
+  for (const [cat, re] of HINTS) {
+    const words = [...new Set((String(text).match(re) || []).map(w => w.toLowerCase()))];
+    if (words.length >= 2 && (!best || words.length > best.words.length)) best = { cat, words: words.slice(0, 3) };
+  }
+  return best;
+}
+
+function parseReceipt(text, opts) {
+  const lines = String(text || "").split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  return {
+    desc: findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf),
+    amt: findTotal(lines),
+    date: findDate(lines.join("\n")),
+    hint: receiptHint(lines.join("\n")),
+  };
+}
 
 
 /* ---------- Icons ---------- */
@@ -523,8 +614,8 @@ async function initStore(){
 
 /* ---------- Mutations ---------- */
 let lastT=0;const nextT=()=>{state.expenses.forEach(e=>{if(e.t>lastT)lastT=e.t});lastT=Math.max(Date.now(),lastT+1);return lastT};
-function addExpense(desc,amt,date,override,reviewed){
-  const g=predict(model,desc,amt);
+function addExpense(desc,amt,date,override,reviewed,guess){
+  const g=guess||predict(model,desc,amt);
   const e={id:uid(),desc,amt:Math.round(+amt*100)/100,date:date||today(),pred:g.cat,conf:Math.round(g.conf*1000)/1000,cat:override||g.cat,reviewed:!!reviewed||!!override,t:nextT()};
   state.expenses.push(e);retrain();return e;
 }
@@ -827,6 +918,12 @@ function rotate(src,deg){
   const x=c.getContext("2d");x.translate(c.width/2,c.height/2);x.rotate(deg*Math.PI/180);x.drawImage(src,-src.width/2,-src.height/2);
   return c;
 }
+function scanPredict(it){
+  // An unknown store gives the model only the amount to go on, so let the receipt's items decide
+  const g=predict(model,it.desc,it.amt);
+  if(it.hint&&(!g.known||g.conf<0.4)&&it.hint.cat!==g.cat)return {cat:it.hint.cat,conf:0.5,known:false,fromItems:it.hint.words};
+  return g;
+}
 const scanScore=(r,conf)=>(r.amt?2:0)+(r.desc?1:0)+(r.date?1:0)+conf/100;
 const readyScans=()=>scanItems.filter(it=>it.status==="done"&&it.desc.trim()&&+it.amt>0);
 function updateScanOk(){const n=readyScans().length;scanOk.disabled=!n;scanOk.textContent=n>1?`Add ${n} expenses`:"Add expense"}
@@ -834,9 +931,9 @@ function scanGuess(it){
   const el=scanList.querySelector(`[data-sid="${it.id}"]`);if(!el||it.status!=="done")return;
   const hint=el.querySelector(".scan-hint"),sel=el.querySelector("select");
   if(!it.desc.trim()){hint.innerHTML="Add the store name and the model will pick a category.";return}
-  const g=predict(model,it.desc,it.amt);it.guess=g.cat;
+  const g=scanPredict(it);it.guess=g.cat;
   sel.value=it.pick||g.cat;sel.style.color=col(ci(sel.value));
-  hint.innerHTML=it.pick&&it.pick!==g.cat?`${icon("check")}Your pick. The model said ${g.cat} and will learn from this.`:`${icon("spark")}Model's guess${g.conf<REVIEW_BELOW?`<span class="conf-pill">${pct(g.conf)} sure</span>`:`, ${pct(g.conf)} sure`}${g.known?"":". New store, so check it."}`;
+  hint.innerHTML=it.pick&&it.pick!==g.cat?`${icon("check")}Your pick. The model said ${g.cat} and will learn from this.`:`${icon("spark")}${g.fromItems?"Guessed from items on the receipt ("+g.fromItems.map(esc).join(", ")+")":"Model's guess"}${g.conf<REVIEW_BELOW?`<span class="conf-pill">${pct(g.conf)} sure</span>`:`, ${pct(g.conf)} sure`}${g.known||g.fromItems?"":". New store, so check it."}`;
 }
 function renderScanItem(it){
   if(!scanItems.includes(it))return;
@@ -866,7 +963,9 @@ function scanOne(it,file){
       const w=await getOCR();
       const img=await prepImage(file,it.url);
       it.stage="Reading receipt…";renderScanItem(it);
-      const read=async c=>{const {data}=await w.recognize(c);const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t)});return {r,score:scanScore(r,data.confidence)}};
+      const read=async c=>{const {data}=await w.recognize(c);
+        const low=new Set((data.lines||[]).filter(l=>l.confidence<60).map(l=>cleanMerchant(l.text.replace(/\s+/g," ").trim())));
+        const r=parseReceipt(data.text,{isKnown:t=>model.vocab.has(t),lowConf:l=>low.has(l)});return {r,score:scanScore(r,data.confidence)}};
       let best=await read(img);
       // Sideways or upside-down receipt: nothing sensible came out, so try the other orientations
       for(const deg of [90,270,180]){
@@ -875,7 +974,7 @@ function scanOne(it,file){
         const alt=await read(rotate(img,deg));if(alt.score>best.score)best=alt;
       }
       const r=best.r;
-      Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today()});
+      Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today(),hint:r.hint});
       const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
       if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
     }catch(e){console.error("Receipt scan failed:",e);it.note=(e&&e.message&&/HEIC|JPG|connection|stuck/.test(e.message)?e.message:"Couldn't read this photo"+(e&&e.message?" ("+e.message+")":"")+".")+" You can type the details below."}
@@ -904,7 +1003,7 @@ scanList.addEventListener("click",e=>{
 });
 scanOk.addEventListener("click",()=>{
   const xs=readyScans();if(!xs.length)return;
-  let last=null;xs.forEach(it=>{last=addExpense(it.desc.trim(),+it.amt,it.date||today(),it.pick,false)});
+  let last=null;xs.forEach(it=>{const g=scanPredict(it);last=addExpense(it.desc.trim(),+it.amt,it.date||today(),it.pick,false,g.fromItems?g:null)});
   scanItems=scanItems.filter(it=>!xs.includes(it));xs.forEach(it=>URL.revokeObjectURL(it.url));
   if(!scanItems.length)dScan.close();else scanList.querySelectorAll(".scan-item").forEach(el=>{if(!scanItems.some(it=>it.id===el.dataset.sid))el.remove()});
   flashId=last&&last.id;render();save();

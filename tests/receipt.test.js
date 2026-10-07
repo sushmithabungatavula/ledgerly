@@ -1,7 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");
-const { parseReceipt, findDate, amountsIn } = require("../src/receipt.js");
+const { parseReceipt, findDate, amountsIn, receiptHint } = require("../src/receipt.js");
 
 test("grocery receipt: picks total over subtotal, tax and cash tendered", () => {
   const r = parseReceipt(`TRADER JOE'S
@@ -69,5 +69,28 @@ test("amounts accept comma decimals and ignore plain integers", () => {
 });
 
 test("empty text gives empty fields instead of throwing", () => {
-  assert.deepStrictEqual(parseReceipt(""), { desc: "", amt: null, date: null });
+  assert.deepStrictEqual(parseReceipt(""), { desc: "", amt: null, date: null, hint: null });
+});
+
+test("dates survive common OCR slips", () => {
+  assert.strictEqual(findDate("10/O7/2026"), "2026-10-07");
+  assert.strictEqual(findDate("1O / 07 / 2026 14:22"), "2026-10-07");
+  assert.strictEqual(findDate("l0-07-26"), "2026-10-07");
+});
+
+test("skips a low-confidence script logo and takes the printed store name", () => {
+  const text = `Suen\nGREEN SUPERMARKET\n12 Oak Ave\nMILK 3.49\nTOTAL 27.35`;
+  const r = parseReceipt(text, { lowConf: l => l === "Suen" });
+  assert.strictEqual(r.desc, "GREEN SUPERMARKET");
+});
+
+test("store-type word wins even without confidence data", () => {
+  assert.strictEqual(parseReceipt(`Grn Sprmkt Co\nGREEN SUPERMARKET\nTOTAL 9.00`).desc, "GREEN SUPERMARKET");
+});
+
+test("item words hint at the category of an unknown store", () => {
+  assert.strictEqual(receiptHint("MILK 3.49\nBREAD 2.10\nBANANAS 1.20").cat, "Groceries");
+  assert.strictEqual(receiptHint("Server: Ana\nLatte 5.00\nTip 1.00").cat, "Dining");
+  assert.strictEqual(receiptHint("UNLEADED 12.1 GAL\nPUMP 4").cat, "Transport");
+  assert.strictEqual(receiptHint("THANK YOU"), null);
 });

@@ -33,7 +33,16 @@ function ymd(y, mo, d) {
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
 
+// OCR often reads 0 as O and 1 as l, I or |, but only fix them next to other digits
+function fixDigits(text) {
+  return text
+    .replace(/(?<=\d)[Oo]|[Oo](?=\d)/g, "0")
+    .replace(/(?<=\d)[lI|]|[lI|](?=\d)/g, "1")
+    .replace(/(\d)\s*([-/.])\s*(?=\d)/g, "$1$2");
+}
+
 function findDate(text) {
+  text = fixDigits(text);
   let m;
   if ((m = text.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/))) {
     const r = ymd(m[1], m[2], m[3]); if (r) return r;
@@ -80,28 +89,50 @@ function cleanMerchant(line) {
   return line.replace(/'/g, "").replace(/[^A-Za-z0-9&.\- ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
 }
 
-function findMerchant(lines, isKnown) {
-  const cands = lines.slice(0, 8)
+const STORE_WORD = /\b(super\s*market|market|grocery|grocer|foods?|mart|cafe|coffee|restaurant|bistro|kitchen|grill|bakery|pizza|pharmacy|drug|store|shop|station|fuel)\b/i;
+
+function findMerchant(lines, isKnown, lowConf) {
+  let cands = lines.slice(0, 8)
     .filter(l => (l.match(/[A-Za-z]/g) || []).length >= 3)
     .filter(l => !SKIP_MERCHANT.test(l) && !ADDRESS.test(l) && !amountsIn(l).length && !findDate(l))
     .map(cleanMerchant)
     .filter(l => l.length >= 3);
+  // Lines the OCR wasn't sure about are usually script logos misread as nonsense
+  if (lowConf) { const sure = cands.filter(l => !lowConf(l)); if (sure.length) cands = sure; }
   if (!cands.length) return "";
   // Prefer a line the model already recognizes, since logos often OCR as noise above the name
   if (isKnown) {
     const k = cands.find(l => l.toLowerCase().split(/[^a-z]+/).some(w => w.length > 2 && isKnown(w)));
     if (k) return k;
   }
-  return cands[0];
+  // A line naming the kind of store ("GREEN SUPERMARKET") beats whatever sits above it
+  return cands.find(l => STORE_WORD.test(l)) || cands[0];
+}
+
+// Words on the receipt that give away the kind of store, for when the model doesn't know the name
+const HINTS = [
+  ["Groceries", /\b(super\s*market|grocery|groceries|grocer|produce|milk|bread|eggs?|banana|bananas|cheese|yogurt|butter|vegetables?|fruit|apples?|onions?|tomato(es)?|chicken|rice|cereal|deli|organic|lb|kg)\b/gi],
+  ["Dining", /\b(restaurant|cafe|caf\u00e9|coffee|latte|espresso|cappuccino|server|table|tip|gratuity|dine|dine-in|takeout|take-out|burger|fries|pizza|sandwich|entree|appetizer|bistro|grill)\b/gi],
+  ["Transport", /\b(fuel|gas|gallons?|gal|unleaded|diesel|pump|parking|toll|petrol)\b/gi],
+  ["Health", /\b(pharmacy|rx|prescription|clinic|medical|copay|dental|vitamins?)\b/gi],
+];
+function receiptHint(text) {
+  let best = null;
+  for (const [cat, re] of HINTS) {
+    const words = [...new Set((String(text).match(re) || []).map(w => w.toLowerCase()))];
+    if (words.length >= 2 && (!best || words.length > best.words.length)) best = { cat, words: words.slice(0, 3) };
+  }
+  return best;
 }
 
 function parseReceipt(text, opts) {
   const lines = String(text || "").split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
   return {
-    desc: findMerchant(lines, opts && opts.isKnown),
+    desc: findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf),
     amt: findTotal(lines),
     date: findDate(lines.join("\n")),
+    hint: receiptHint(lines.join("\n")),
   };
 }
 
-if (typeof module !== "undefined") module.exports = { parseReceipt, findTotal, findDate, findMerchant, amountsIn };
+if (typeof module !== "undefined") module.exports = { parseReceipt, findTotal, findDate, findMerchant, amountsIn, receiptHint };
