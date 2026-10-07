@@ -487,8 +487,8 @@ function findMerchant(lines, isKnown, lowConf) {
     .filter(l => !SKIP_MERCHANT.test(l) && !ADDRESS.test(l) && !amountsIn(l).length && !findDate(l))
     .map(cleanMerchant)
     .filter(l => l.length >= 3);
-  // Lines the OCR wasn't sure about are usually script logos misread as nonsense
-  if (lowConf) { const sure = cands.filter(l => !lowConf(l)); if (sure.length) cands = sure; }
+  // Lines the OCR wasn't sure about are usually script logos misread as nonsense, so drop them
+  if (lowConf) cands = cands.filter(l => !lowConf(l));
   if (!cands.length) return "";
   // Prefer a line the model already recognizes, since logos often OCR as noise above the name
   if (isKnown) {
@@ -515,14 +515,15 @@ function receiptHint(text) {
   return best;
 }
 
+// What to call the store when its name can't be read but the items say what kind it is
+const STORE_LABEL = { Groceries: "Grocery store", Dining: "Restaurant", Transport: "Gas station", Health: "Pharmacy" };
+
 function parseReceipt(text, opts) {
   const lines = String(text || "").split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
-  return {
-    desc: findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf),
-    amt: findTotal(lines),
-    date: findDate(lines.join("\n")),
-    hint: receiptHint(lines.join("\n")),
-  };
+  const hint = receiptHint(lines.join("\n"));
+  let desc = findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf), descGuessed = false;
+  if (!desc && hint) { desc = STORE_LABEL[hint.cat]; descGuessed = true; }
+  return { desc, descGuessed, amt: findTotal(lines), date: findDate(lines.join("\n")), hint };
 }
 
 
@@ -975,8 +976,11 @@ function scanOne(it,file){
       }
       const r=best.r;
       Object.assign(it,{desc:r.desc,amt:r.amt?r.amt.toFixed(2):"",date:r.date||today(),hint:r.hint});
-      const miss=[!r.desc&&"store",!r.amt&&"total",!r.date&&"date"].filter(Boolean);
-      if(miss.length)it.note=`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`;
+      const miss=[!r.desc&&"store",!r.amt&&"total"].filter(Boolean),notes=[];
+      if(miss.length)notes.push(`Couldn't read the ${miss.join(" or ")}. Fill ${miss.length>1?"them":"it"} in below.`);
+      if(r.descGuessed)notes.push(`Couldn't read the store's logo, so it's called \u201C${r.desc}\u201D. Type the real name if you like.`);
+      if(!r.date)notes.push("No date on the receipt, so it's set to today.");
+      it.note=notes.join(" ");
     }catch(e){console.error("Receipt scan failed:",e);it.note=(e&&e.message&&/HEIC|JPG|connection|stuck/.test(e.message)?e.message:"Couldn't read this photo"+(e&&e.message?" ("+e.message+")":"")+".")+" You can type the details below."}
     ocrLog=null;it.status="done";renderScanItem(it);
   });

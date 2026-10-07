@@ -69,7 +69,7 @@ test("amounts accept comma decimals and ignore plain integers", () => {
 });
 
 test("empty text gives empty fields instead of throwing", () => {
-  assert.deepStrictEqual(parseReceipt(""), { desc: "", amt: null, date: null, hint: null });
+  assert.deepStrictEqual(parseReceipt(""), { desc: "", descGuessed: false, amt: null, date: null, hint: null });
 });
 
 test("dates survive common OCR slips", () => {
@@ -93,4 +93,13 @@ test("item words hint at the category of an unknown store", () => {
   assert.strictEqual(receiptHint("Server: Ana\nLatte 5.00\nTip 1.00").cat, "Dining");
   assert.strictEqual(receiptHint("UNLEADED 12.1 GAL\nPUMP 4").cat, "Transport");
   assert.strictEqual(receiptHint("THANK YOU"), null);
+});
+
+test("unreadable logo and no other name: names the store by its items instead of gibberish", () => {
+  const text = `Sumantet\n2 APPLE 1.00\n3 BANANA 1.50\n1 MILK 1.50\n1 CHEESE 2.80\nTOTAL 27.35\nCASH 30.00\nCHANGE 2.65`;
+  const r = parseReceipt(text, { lowConf: l => l === "Sumantet" });
+  assert.strictEqual(r.desc, "Grocery store");
+  assert.strictEqual(r.descGuessed, true);
+  assert.strictEqual(r.amt, 27.35);
+  assert.strictEqual(r.date, null);
 });

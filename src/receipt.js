@@ -97,8 +97,8 @@ function findMerchant(lines, isKnown, lowConf) {
     .filter(l => !SKIP_MERCHANT.test(l) && !ADDRESS.test(l) && !amountsIn(l).length && !findDate(l))
     .map(cleanMerchant)
     .filter(l => l.length >= 3);
-  // Lines the OCR wasn't sure about are usually script logos misread as nonsense
-  if (lowConf) { const sure = cands.filter(l => !lowConf(l)); if (sure.length) cands = sure; }
+  // Lines the OCR wasn't sure about are usually script logos misread as nonsense, so drop them
+  if (lowConf) cands = cands.filter(l => !lowConf(l));
   if (!cands.length) return "";
   // Prefer a line the model already recognizes, since logos often OCR as noise above the name
   if (isKnown) {
@@ -125,14 +125,15 @@ function receiptHint(text) {
   return best;
 }
 
+// What to call the store when its name can't be read but the items say what kind it is
+const STORE_LABEL = { Groceries: "Grocery store", Dining: "Restaurant", Transport: "Gas station", Health: "Pharmacy" };
+
 function parseReceipt(text, opts) {
   const lines = String(text || "").split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean);
-  return {
-    desc: findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf),
-    amt: findTotal(lines),
-    date: findDate(lines.join("\n")),
-    hint: receiptHint(lines.join("\n")),
-  };
+  const hint = receiptHint(lines.join("\n"));
+  let desc = findMerchant(lines, opts && opts.isKnown, opts && opts.lowConf), descGuessed = false;
+  if (!desc && hint) { desc = STORE_LABEL[hint.cat]; descGuessed = true; }
+  return { desc, descGuessed, amt: findTotal(lines), date: findDate(lines.join("\n")), hint };
 }
 
 if (typeof module !== "undefined") module.exports = { parseReceipt, findTotal, findDate, findMerchant, amountsIn, receiptHint };
